@@ -1,6 +1,9 @@
 {
   "expo": {
     "name": "planty",
+    "extra": {
+      "HUGGING_FACE_TOKEN": "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"
+    },
     "slug": "planty",
     "version": "1.0.0",
     "orientation": "portrait",
