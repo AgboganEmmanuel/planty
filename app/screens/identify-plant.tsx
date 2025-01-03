@@ -17,6 +17,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 interface PlantResult {
   label: string;
   score: number;
+  commonNames?: string[];
+  family?: string;
+  genus?: string;
+  images?: string[];
 }
 
 export default function IdentifyPlantScreen() {
@@ -24,9 +28,27 @@ export default function IdentifyPlantScreen() {
   const [plantResults, setPlantResults] = useState<PlantResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Get Hugging Face token from Expo config
+ /* // Get Hugging Face token from Expo config
   const HUGGING_FACE_TOKEN = Constants.expoConfig?.extra?.HUGGING_FACE_TOKEN;
   const hf = new HfInference(HUGGING_FACE_TOKEN || '');
+
+  const pickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 1,
+      });
+
+      if (!result.canceled) {
+        setPlantImage(result.assets[0].uri);
+        setPlantResults([]);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+    }
+  };*/
 
   const pickImage = async () => {
     try {
@@ -63,7 +85,7 @@ export default function IdentifyPlantScreen() {
     }
   };
 
-  const identifyPlant = async () => {
+  /*const identifyPlant = async () => {
     if (!plantImage || !HUGGING_FACE_TOKEN) return;
 
     setIsLoading(true);
@@ -90,8 +112,97 @@ export default function IdentifyPlantScreen() {
       setPlantResults([]);
     } finally {
       setIsLoading(false);
-    }
-  };
+    }*/
+
+      const identifyPlant = async () => {
+        // Get PlantNet API key, endpoint, and project from Expo config
+        const PLANTNET_API_KEY = Constants.expoConfig?.extra?.PLANTNET_API_KEY;
+        const PLANTNET_API_PROJECT = Constants.expoConfig?.extra?.PLANTNET_API_PROJECT || 'all';
+        const PLANTNET_API_ENDPOINT = Constants.expoConfig?.extra?.PLANTNET_API_ENDPOINT || 'https://my-api.plantnet.org/v2/identify';
+      
+        if (!plantImage || !PLANTNET_API_KEY) {
+          console.error('Error', 'No image or API key');
+          return;
+        }
+      
+        setIsLoading(true);
+        try {
+          // Create FormData for file upload
+          const formData = new FormData();
+          formData.append('images', {
+            uri: plantImage,
+            type: 'image/jpeg',
+            name: 'plant.jpg'
+          } as any);
+      
+          // Log full API request details for debugging
+          console.log('API Endpoint:', PLANTNET_API_ENDPOINT);
+          console.log('API Project:', PLANTNET_API_PROJECT);
+          console.log('API Key:', PLANTNET_API_KEY ? 'Present' : 'Missing');
+      
+          // PlantNet API request
+          const fullUrl = `${PLANTNET_API_ENDPOINT}/${PLANTNET_API_PROJECT}?api-key=${PLANTNET_API_KEY}`;
+          console.log('Full API URL:', fullUrl);
+      
+          const response = await fetch(fullUrl, 
+            {
+              method: 'POST',
+              body: formData,
+              headers: {
+                'Content-Type': 'multipart/form-data',
+              }
+            }
+          );
+      
+          // Log response details
+          console.log('Response Status:', response.status);
+          console.log('Response Headers:', Object.fromEntries(response.headers.entries()));
+      
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Error Response Body:', errorText);
+            throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
+          }
+      
+          const data = await response.json();
+      
+          // Validate and transform PlantNet results
+          const results = data.results?.map((result: any) => {
+            // Detailed logging for debugging
+            console.log('Raw PlantNet Result:', JSON.stringify(result, null, 2));
+            
+            return {
+              label: result.species?.scientificName || 'Unknown Species',
+              score: result.score || 0,
+              commonNames: result.species?.commonNames || [],
+              family: result.species?.family?.scientificName || 'Unknown Family',
+              genus: result.species?.genus?.scientificName || 'Unknown Genus',
+              images: result.images?.map((img: any) => img.url?.m).filter(Boolean) || []
+            };
+          }) || [];
+      
+          // Log transformed results for verification
+          console.log('Transformed Results:', JSON.stringify(results, null, 2));
+      
+          // Sort and limit results
+          const sortedResults = results
+            .filter((result: PlantResult) => result.score > 0)
+            .sort((a: PlantResult, b: PlantResult) => b.score - a.score)
+            .slice(0, 1);  // Only take the top result
+      
+          setPlantResults(sortedResults);
+        } catch (error) {
+          console.error('Plant identification error:', error);
+          // More informative error handling
+          if (error instanceof Error) {
+            console.error('Error details:', error.message);
+          }
+          console.error('Error', 'Failed to identify plant');
+          setPlantResults([]);
+        } finally {
+          setIsLoading(false);
+        }
+      };
 
   return (
     <LinearGradient 
@@ -160,16 +271,37 @@ export default function IdentifyPlantScreen() {
           {plantResults.length > 0 && (
             <View style={styles.resultsContainer}>
               <Text style={styles.resultsTitle}>Identification Results</Text>
-              {plantResults.map((result, index) => (
-                <View key={index} style={styles.resultItem}>
+              <View style={styles.resultItem}>
+                <View style={styles.resultTextContainer}>
                   <Text style={styles.resultLabel}>
-                    {result.label}
+                    {plantResults[0].label}
                   </Text>
-                  <Text style={styles.resultScore}>
-                    {(result.score * 100).toFixed(2)}%
-                  </Text>
+                  {plantResults[0].commonNames && plantResults[0].commonNames.length > 0 && (
+                    <Text style={styles.resultCommonName}>
+                      {plantResults[0].commonNames[0]}
+                    </Text>
+                  )}
                 </View>
-              ))}
+                <View style={styles.resultDetailsContainer}>
+                  <Text style={styles.resultScore}>
+                    Confidence: {(plantResults[0].score * 100).toFixed(2)}%
+                  </Text>
+                  {plantResults[0].family && (
+                    <Text style={styles.resultFamily}>
+                      Family: {plantResults[0].family}
+                    </Text>
+                  )}
+                </View>
+                {plantResults[0].images && plantResults[0].images.length > 0 && (
+                  <View style={styles.resultImageContainer}>
+                    <Image 
+                      source={{ uri: plantResults[0].images[0] }} 
+                      style={styles.resultImage} 
+                      resizeMode="cover"
+                    />
+                  </View>
+                )}
+              </View>
             </View>
           )}
         </ScrollView>
@@ -246,27 +378,63 @@ const styles = StyleSheet.create({
   resultsContainer: {
     width: '100%',
     backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 15,
+    borderRadius: 10,
     padding: 15,
-  },
-  resultsTitle: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 10,
-    textAlign: 'center',
+    marginTop: 20,
+    alignSelf: 'center',
   },
   resultItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 8,
+    padding: 15,
+  },
+  resultTextContainer: {
+    flex: 2,
+    marginRight: 10,
+  },
+  resultsTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: 'white',
     marginBottom: 10,
+    textAlign: 'center',
   },
   resultLabel: {
     color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  resultCommonName: {
+    color: 'rgba(255,255,255,0.7)',
     fontSize: 16,
+    marginTop: 5,
+  },
+  resultDetailsContainer: {
+    flex: 1,
+    alignItems: 'flex-end',
   },
   resultScore: {
     color: 'white',
-    fontWeight: 'bold',
+    fontSize: 16,
+    marginBottom: 5,
+  },
+  resultFamily: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 14,
+  },
+  resultImageContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 10,
+    marginLeft: 10,
+    overflow: 'hidden',
+  },
+  resultImage: {
+    width: '100%',
+    height: '100%',
   },
 });
