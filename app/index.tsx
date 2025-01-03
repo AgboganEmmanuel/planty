@@ -27,8 +27,8 @@ export default function HomeScreen() {
             autoPlay
             loop
             style={{ 
-              width: 300, 
-              height: 250, 
+              width: 350, 
+              height: 350, 
               alignSelf: 'center',
             }}
           />

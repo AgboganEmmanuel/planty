@@ -10,9 +10,11 @@ import {
 } from 'react-native';
 import Constants from 'expo-constants';
 import * as ImagePicker from 'expo-image-picker';
-import { HfInference } from '@huggingface/inference';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { supabase, deviceId } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
+
 
 interface PlantResult {
   label: string;
@@ -23,32 +25,18 @@ interface PlantResult {
   images?: string[];
 }
 
+interface PlantIdentificationData {
+  name: string;
+  species: string;
+  imageUrl: string;
+  notes?: string;
+}
+
 export default function IdentifyPlantScreen() {
   const [plantImage, setPlantImage] = useState<string | null>(null);
   const [plantResults, setPlantResults] = useState<PlantResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-
- /* // Get Hugging Face token from Expo config
-  const HUGGING_FACE_TOKEN = Constants.expoConfig?.extra?.HUGGING_FACE_TOKEN;
-  const hf = new HfInference(HUGGING_FACE_TOKEN || '');
-
-  const pickImage = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 1,
-      });
-
-      if (!result.canceled) {
-        setPlantImage(result.assets[0].uri);
-        setPlantResults([]);
-      }
-    } catch (error) {
-      console.error('Error picking image:', error);
-    }
-  };*/
+  const { session } = useAuth();
 
   const pickImage = async () => {
     try {
@@ -85,124 +73,146 @@ export default function IdentifyPlantScreen() {
     }
   };
 
-  /*const identifyPlant = async () => {
-    if (!plantImage || !HUGGING_FACE_TOKEN) return;
+  const savePlantIdentification = async (plantResult: PlantResult) => {
+    if (!session?.user) {
+      console.error('Erreur', 'Vous devez être connecté pour enregistrer une identification');
+      return null;
+    }
+    
+    // Use the passed plantResult instead of checking plantResults
+    if (!plantResult) {
+      console.error('Erreur', 'Aucun résultat d\'identification disponible');
+      return null;
+    }
+    
+    // Prepare plant data with comprehensive details
+    const plantToSave = {
+      user_id: session.user.id,
+      plant_name: plantResult.commonNames && plantResult.commonNames.length > 0 
+        ? plantResult.commonNames[0] 
+        : plantResult.label,
+      species: plantResult.label,
+      image_url: plantResult.images && plantResult.images.length > 0 
+        ? plantResult.images[0] 
+        : plantImage,
+      additional_notes: JSON.stringify({
+        confidence: (plantResult.score * 100).toFixed(2) + '%',
+        family: plantResult.family || 'Non spécifié',
+        genus: plantResult.genus || 'Non spécifié',
+        scientificName: plantResult.label
+      }),
+      identification_date: new Date().toISOString()
+    };
+    
+    const { data, error } = await supabase
+      .from('plants')
+      .insert(plantToSave)
+      .select(); // Return the inserted record
+    
+    if (error) {
+      console.error('Erreur lors de la sauvegarde de la plante:', error);
+      console.error('Erreur', 'Impossible d\'enregistrer l\'identification de la plante');
+      return null;
+    }
+    
+    // Show success message
+    console.log('Succès', 'Plante identifiée et enregistrée');
+    
+    return data ? data[0] : null;
+  };
 
+  const fetchUserPlants = async () => {
+    if (!session?.user) return [];
+
+    const { data, error } = await supabase
+      .from('plants')
+      .select('*')
+      .eq('user_id', session.user.id);
+
+    if (error) {
+      console.error('Error fetching plants:', error);
+      return [];
+    }
+
+    return data;
+  };
+
+  const identifyPlant = async () => {
+    // Get PlantNet API key, endpoint, and project from Expo config
+    const PLANTNET_API_KEY = Constants.expoConfig?.extra?.PLANTNET_API_KEY;
+    const PLANTNET_API_PROJECT = Constants.expoConfig?.extra?.PLANTNET_API_PROJECT || 'all';
+    const PLANTNET_API_ENDPOINT = Constants.expoConfig?.extra?.PLANTNET_API_ENDPOINT || 'https://my-api.plantnet.org/v2/identify';
+  
+    if (!plantImage || !PLANTNET_API_KEY) {
+      console.error('Error', 'No image or API key');
+      return;
+    }
+  
     setIsLoading(true);
     try {
-      // Fetch image as blob
-      const response = await fetch(plantImage);
-      const blob = await response.blob();
-
-      // Perform image classification
-      const results = await hf.imageClassification({
-        data: blob,
-        model: 'google/vit-base-patch16-224',
-      });
-      console.log(results);
+      // Create FormData for file upload
+      const formData = new FormData();
+      formData.append('images', {
+        uri: plantImage,
+        type: 'image/jpeg',
+        name: 'plant.jpg'
+      } as any);
+  
+      // PlantNet API request
+      const fullUrl = `${PLANTNET_API_ENDPOINT}/${PLANTNET_API_PROJECT}?api-key=${PLANTNET_API_KEY}`;
+      console.log('Full API URL:', fullUrl);
+  
+      const response = await fetch(fullUrl, 
+        {
+          method: 'POST',
+          body: formData,
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          }
+        }
+      );
+  
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+  
+      const data = await response.json();
+  
+      // Validate and transform PlantNet results
+      const results = data.results?.map((result: any) => {
+        return {
+          label: result.species?.scientificName || 'Unknown Species',
+          score: result.score || 0,
+          commonNames: result.species?.commonNames || [],
+          family: result.species?.family?.scientificName || 'Unknown Family',
+          genus: result.species?.genus?.scientificName || 'Unknown Genus',
+          images: result.images?.map((img: any) => img.url?.m).filter(Boolean) || []
+        };
+      }) || [];
+  
       // Sort and limit results
       const sortedResults = results
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 5);
-
+        .filter((result: PlantResult) => result.score > 0)
+        .sort((a: PlantResult, b: PlantResult) => b.score - a.score)
+        .slice(0, 1);
+  
       setPlantResults(sortedResults);
+  
+      // Save the identified plant
+      if (sortedResults.length > 0) {
+        await savePlantIdentification(sortedResults[0]);
+      }
     } catch (error) {
       console.error('Plant identification error:', error);
-      // Optionally, show an error to the user
+      if (error instanceof Error) {
+        console.error('Error details:', error.message);
+      }
+      console.error('Error', 'Failed to identify plant');
       setPlantResults([]);
     } finally {
       setIsLoading(false);
-    }*/
-
-      const identifyPlant = async () => {
-        // Get PlantNet API key, endpoint, and project from Expo config
-        const PLANTNET_API_KEY = Constants.expoConfig?.extra?.PLANTNET_API_KEY;
-        const PLANTNET_API_PROJECT = Constants.expoConfig?.extra?.PLANTNET_API_PROJECT || 'all';
-        const PLANTNET_API_ENDPOINT = Constants.expoConfig?.extra?.PLANTNET_API_ENDPOINT || 'https://my-api.plantnet.org/v2/identify';
-      
-        if (!plantImage || !PLANTNET_API_KEY) {
-          console.error('Error', 'No image or API key');
-          return;
-        }
-      
-        setIsLoading(true);
-        try {
-          // Create FormData for file upload
-          const formData = new FormData();
-          formData.append('images', {
-            uri: plantImage,
-            type: 'image/jpeg',
-            name: 'plant.jpg'
-          } as any);
-      
-          // Log full API request details for debugging
-          console.log('API Endpoint:', PLANTNET_API_ENDPOINT);
-          console.log('API Project:', PLANTNET_API_PROJECT);
-          console.log('API Key:', PLANTNET_API_KEY ? 'Present' : 'Missing');
-      
-          // PlantNet API request
-          const fullUrl = `${PLANTNET_API_ENDPOINT}/${PLANTNET_API_PROJECT}?api-key=${PLANTNET_API_KEY}`;
-          console.log('Full API URL:', fullUrl);
-      
-          const response = await fetch(fullUrl, 
-            {
-              method: 'POST',
-              body: formData,
-              headers: {
-                'Content-Type': 'multipart/form-data',
-              }
-            }
-          );
-      
-          // Log response details
-          console.log('Response Status:', response.status);
-          console.log('Response Headers:', Object.fromEntries(response.headers.entries()));
-      
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error('Error Response Body:', errorText);
-            throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
-          }
-      
-          const data = await response.json();
-      
-          // Validate and transform PlantNet results
-          const results = data.results?.map((result: any) => {
-            // Detailed logging for debugging
-            console.log('Raw PlantNet Result:', JSON.stringify(result, null, 2));
-            
-            return {
-              label: result.species?.scientificName || 'Unknown Species',
-              score: result.score || 0,
-              commonNames: result.species?.commonNames || [],
-              family: result.species?.family?.scientificName || 'Unknown Family',
-              genus: result.species?.genus?.scientificName || 'Unknown Genus',
-              images: result.images?.map((img: any) => img.url?.m).filter(Boolean) || []
-            };
-          }) || [];
-      
-          // Log transformed results for verification
-          console.log('Transformed Results:', JSON.stringify(results, null, 2));
-      
-          // Sort and limit results
-          const sortedResults = results
-            .filter((result: PlantResult) => result.score > 0)
-            .sort((a: PlantResult, b: PlantResult) => b.score - a.score)
-            .slice(0, 1);  // Only take the top result
-      
-          setPlantResults(sortedResults);
-        } catch (error) {
-          console.error('Plant identification error:', error);
-          // More informative error handling
-          if (error instanceof Error) {
-            console.error('Error details:', error.message);
-          }
-          console.error('Error', 'Failed to identify plant');
-          setPlantResults([]);
-        } finally {
-          setIsLoading(false);
-        }
-      };
+    }
+  };
 
   return (
     <LinearGradient 
@@ -273,14 +283,14 @@ export default function IdentifyPlantScreen() {
               <Text style={styles.resultsTitle}>Identification Results</Text>
               <View style={styles.resultItem}>
                 <View style={styles.resultTextContainer}>
-                  <Text style={styles.resultLabel}>
-                    {plantResults[0].label}
-                  </Text>
                   {plantResults[0].commonNames && plantResults[0].commonNames.length > 0 && (
                     <Text style={styles.resultCommonName}>
                       {plantResults[0].commonNames[0]}
                     </Text>
                   )}
+                  <Text style={styles.resultLabel}>
+                    {plantResults[0].label}
+                  </Text>
                 </View>
                 <View style={styles.resultDetailsContainer}>
                   <Text style={styles.resultScore}>
@@ -404,14 +414,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   resultLabel: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 16,
+    marginTop: 5, 
+  },
+  resultCommonName: {
     color: 'white',
     fontSize: 18,
     fontWeight: 'bold',
-  },
-  resultCommonName: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 16,
-    marginTop: 5,
   },
   resultDetailsContainer: {
     flex: 1,
