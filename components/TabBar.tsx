@@ -1,7 +1,6 @@
 import React from 'react';
 import { View, TouchableOpacity, Text } from 'react-native';
 import { useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
 interface MenuItem {
@@ -30,14 +29,14 @@ export default function TabBar() {
       route: '/screens/my-plants'
     },
     { 
-      title: 'Conseils', 
-      icon: 'information-circle-outline',
-      route: '/screens/plant-care-tips'
-    },
-    { 
       title: 'Notifications', 
       icon: 'notifications-outline',
       route: '/screens/notifications'
+    },
+    { 
+      title: 'Settings', 
+      icon: 'settings-outline', 
+      route: '/screens/settings'
     }
   ];
 
