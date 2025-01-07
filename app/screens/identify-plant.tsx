@@ -14,6 +14,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase, deviceId } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { getPlantInformation } from '../lib/huggingface';
+import { createNotification as createNotificationImport, CreateNotificationParams } from '../screens/notifications';
+
+// Créer une copie de la fonction pour éviter les problèmes de contexte
+const createNotification = async (params: CreateNotificationParams) => {
+  return await createNotificationImport(params);
+};
 
 
 interface PlantResult {
@@ -79,46 +86,95 @@ export default function IdentifyPlantScreen() {
       return null;
     }
     
-    // Use the passed plantResult instead of checking plantResults
     if (!plantResult) {
       console.error('Erreur', 'Aucun résultat d\'identification disponible');
       return null;
     }
     
-    // Prepare plant data with comprehensive details
-    const plantToSave = {
-      user_id: session.user.id,
-      plant_name: plantResult.commonNames && plantResult.commonNames.length > 0 
-        ? plantResult.commonNames[0] 
-        : plantResult.label,
-      species: plantResult.label,
-      image_url: plantResult.images && plantResult.images.length > 0 
-        ? plantResult.images[0] 
-        : plantImage,
-      additional_notes: JSON.stringify({
-        confidence: (plantResult.score * 100).toFixed(2) + '%',
-        family: plantResult.family || 'Non spécifié',
-        genus: plantResult.genus || 'Non spécifié',
-        scientificName: plantResult.label
-      }),
-      identification_date: new Date().toISOString()
-    };
-    
-    const { data, error } = await supabase
-      .from('plants')
-      .insert(plantToSave)
-      .select(); // Return the inserted record
-    
-    if (error) {
-      console.error('Erreur lors de la sauvegarde de la plante:', error);
-      console.error('Erreur', 'Impossible d\'enregistrer l\'identification de la plante');
+    try {
+      // Obtenir les informations sur la plante
+      const plantInformation = await getPlantInformation(
+        plantResult.commonNames?.[0] || plantResult.label, 
+        plantResult.label
+      );
+      
+      // Préparer les données de la plante à enregistrer
+      const plantToSave = {
+        user_id: session.user.id,
+        plant_name: plantResult.commonNames && plantResult.commonNames.length > 0 
+          ? plantResult.commonNames[0] 
+          : plantResult.label,
+        species: plantResult.label,
+        image_url: plantResult.images && plantResult.images.length > 0 
+          ? plantResult.images[0] 
+          : plantImage,
+        additional_notes: JSON.stringify({
+          confidence: (plantResult.score * 100).toFixed(2) + '%',
+          family: plantResult.family || 'Non spécifié',
+          genus: plantResult.genus || 'Non spécifié',
+          scientificName: plantResult.label
+        }),
+        information: plantInformation || 'No additional information available',
+        identification_date: new Date().toISOString()
+      };
+      
+      // Enregistrer la plante dans Supabase
+      const { data, error } = await supabase
+        .from('plants')
+        .insert(plantToSave)
+        .select(); // Retourner l'enregistrement inséré
+      
+      if (error) {
+        console.error('Erreur lors de la sauvegarde de la plante:', error);
+        return null;
+      }
+      
+    /*  // Créer une notification pour la nouvelle identification
+      if (data && data[0]) {
+        try {
+          console.log('DEBUG: Données de la plante', data[0]);
+          console.log('DEBUG: Session utilisateur', session);
+
+          // Vérifier que la fonction est bien importée
+          console.log('DEBUG: Type de createNotification:', typeof createNotification);
+          console.log('DEBUG: Contenu de createNotification:', createNotification);
+
+          if (typeof createNotification !== 'function') {
+            console.error('DEBUG: createNotification is not a function');
+            throw new Error('createNotification is not a function');
+          }
+
+          const notificationParams: CreateNotificationParams = {
+            userId: session.user.id,
+            type: 'new_identification',
+            plantId: data[0].id,
+            message: `Nouvelle plante identifiée : ${plantToSave.plant_name}`
+          };
+          
+          console.log('DEBUG: Paramètres de notification', notificationParams);
+          
+          const notificationResult = await createNotification(notificationParams);
+          
+          console.log('DEBUG: Résultat de la notification:', notificationResult);
+
+          if (!notificationResult) {
+            console.error('DEBUG: La création de notification a échoué');
+          }
+        } catch (notificationError) {
+          console.error('Erreur lors de la création de la notification:', notificationError);
+          // Afficher la pile d'appel complète
+          console.error(notificationError instanceof Error ? notificationError.stack : 'No stack trace');
+        }
+      }*/
+
+      // Message de succès
+      console.log('Succès', 'Plante identifiée et enregistrée');
+      
+      return data ? data[0] : null;
+    } catch (error) {
+      console.error('Erreur inattendue lors de l\'identification de la plante:', error);
       return null;
     }
-    
-    // Show success message
-    console.log('Succès', 'Plante identifiée et enregistrée');
-    
-    return data ? data[0] : null;
   };
 
   const fetchUserPlants = async () => {

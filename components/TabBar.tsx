@@ -34,6 +34,11 @@ export default function TabBar() {
       route: '/screens/notifications'
     },
     { 
+      title: 'Watering', 
+      icon: 'water-outline', 
+      route: '/screens/watering' 
+    },
+    { 
       title: 'Settings', 
       icon: 'settings-outline', 
       route: '/screens/settings'

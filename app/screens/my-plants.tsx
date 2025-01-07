@@ -3,15 +3,16 @@ import {
   View, 
   Text, 
   FlatList, 
-  Image, 
   StyleSheet, 
-  TouchableOpacity,
+  Image, 
+  TouchableOpacity, 
   RefreshControl,
   Alert
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { useRouter } from 'expo-router';
 
 interface SavedPlant {
   id: string;
@@ -20,6 +21,7 @@ interface SavedPlant {
   image_url?: string | null;
   additional_notes?: string | null;
   identification_date: string;
+  information?: string;
 }
 
 export default function MyPlantsScreen() {
@@ -27,6 +29,7 @@ export default function MyPlantsScreen() {
   const [plants, setPlants] = useState<SavedPlant[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const router = useRouter();
 
   const fetchUserPlants = useCallback(async () => {
     if (!session?.user) {
@@ -64,72 +67,63 @@ export default function MyPlantsScreen() {
     fetchUserPlants();
   }, [fetchUserPlants]);
 
-  const removePlant = async (plantId: string) => {
-    try {
-      const { error } = await supabase
-        .from('plants')
-        .delete()
-        .eq('id', plantId)
-        .eq('user_id', session?.user?.id);
-
-      if (error) throw error;
-
-      setPlants(currentPlants => 
-        currentPlants.filter(plant => plant.id !== plantId)
-      );
-
-      Alert.alert('Succès', 'Plante supprimée avec succès');
-    } catch (err) {
-      console.error('Erreur de suppression de plante:', err);
-      Alert.alert('Erreur', 'Impossible de supprimer la plante');
-    }
-  };
-
   const renderPlantItem = ({ item }: { item: SavedPlant }) => (
-    <View style={styles.plantCard}>
-      {item.image_url && (
+    <TouchableOpacity 
+      style={styles.plantCard}
+      onPress={() => router.push({
+        pathname: '/screens/details',
+        params: { 
+          plantId: item.id,
+          plantName: item.plant_name,
+          species: item.species,
+          imageUrl: item.image_url || '',
+          identificationDate: item.identification_date,
+          additionalNotes: item.additional_notes || '',
+          information: item.information || ''
+        }
+      })}
+    >
+      {item.image_url ? (
         <Image 
           source={{ uri: item.image_url }} 
           style={styles.plantImage} 
+          resizeMode="cover" 
         />
+      ) : (
+        <View style={styles.placeholderImage} />
       )}
-      <View style={styles.plantInfo}>
-        <Text style={styles.plantName}>{item.plant_name}</Text>
-        <Text style={styles.plantSpecies}>{item.species}</Text>
+      
+      <View style={styles.plantDetails}>
+        <Text style={styles.plantName} numberOfLines={1}>
+          {item.plant_name}
+        </Text>
+        <Text style={styles.plantSpecies} numberOfLines={1}>
+          {item.species}
+        </Text>
         <Text style={styles.plantDate}>
-          Ajoutée le: {new Date(item.identification_date).toLocaleDateString()}
+          {new Date(item.identification_date).toLocaleDateString()}
         </Text>
       </View>
-    </View>
+    </TouchableOpacity>
   );
-
-  if (isLoading) {
-    return (
-      <LinearGradient 
-        colors={['#2ecc71', '#27ae60']} 
-        style={styles.container}
-      >
-        <Text style={styles.loadingText}>Chargement de vos plantes...</Text>
-      </LinearGradient>
-    );
-  }
 
   return (
     <LinearGradient 
       colors={['#2ecc71', '#27ae60']} 
       style={styles.container}
     >
-      {plants.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyStateText}>
-            Aucune plante identifiée pour le moment. Commencez à identifier vos plantes !
-          </Text>
-        </View>
-      ) : (
+      <View style={styles.headerContainer}>
+        <Text style={styles.headerTitle}>My Plants</Text>
+      </View>
+
+      {isLoading ? (
+        <Text style={styles.loadingText}>Loading plants...</Text>
+      ) : plants.length > 0 ? (
         <FlatList
           data={plants}
           renderItem={renderPlantItem}
           keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.plantListContainer}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -139,6 +133,10 @@ export default function MyPlantsScreen() {
             />
           }
         />
+      ) : (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>No plants found</Text>
+        </View>
       )}
     </LinearGradient>
   );
@@ -149,23 +147,42 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingTop: 60,
   },
+  headerContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  plantListContainer: {
+    paddingHorizontal: 20,
+  },
   plantCard: {
     flexDirection: 'row',
     backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 10,
+    borderRadius: 15,
     padding: 15,
-    marginVertical: 8,
-    marginHorizontal: 16,
-    marginTop: 10,
+    marginVertical: 10,
     alignItems: 'center',
   },
   plantImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 10,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     marginRight: 15,
+    borderWidth: 3,
+    borderColor: 'rgba(255,255,255,0.3)',
   },
-  plantInfo: {
+  placeholderImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    marginRight: 15,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  plantDetails: {
     flex: 1,
     justifyContent: 'center',
   },
@@ -173,49 +190,30 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: 'white',
+    marginBottom: 5,
   },
   plantSpecies: {
     fontSize: 14,
-    color: 'white',
-    opacity: 0.8,
-  },
-  plantNotes: {
-    fontSize: 12,
-    color: 'white',
-    marginTop: 5,
+    color: 'rgba(255,255,255,0.8)',
+    marginBottom: 5,
   },
   plantDate: {
     fontSize: 12,
-    color: 'white',
-    opacity: 0.6,
-    marginTop: 5,
-  },
-  deleteButton: {
-    backgroundColor: 'rgba(255,0,0,0.3)',
-    borderRadius: 25,
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  deleteButtonText: {
-    fontSize: 20,
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  emptyStateText: {
-    color: 'white',
-    fontSize: 18,
-    textAlign: 'center',
+    color: 'rgba(255,255,255,0.6)',
   },
   loadingText: {
     color: 'white',
-    fontSize: 18,
     textAlign: 'center',
-    marginTop: 20,
+    marginTop: 50,
+    fontSize: 16,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyText: {
+    color: 'white',
+    fontSize: 16,
   },
 });

@@ -11,6 +11,7 @@ import {
 import { supabase } from '../app/lib/supabase';
 import { useAuth } from '../app/contexts/AuthContext';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 
 // Screen width for responsive design
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -21,12 +22,15 @@ interface Plant {
   species: string;
   image_url?: string | null;
   identification_date: string;
+  additional_notes?: string;
+  information?: string;
 }
 
 export default function PlantCard() {
   const [plants, setPlants] = useState<Plant[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { session } = useAuth();
+  const router = useRouter();
 
   useEffect(() => {
     fetchUserPlants();
@@ -57,7 +61,21 @@ export default function PlantCard() {
   };
 
   const renderPlantCard = ({ item }: { item: Plant }) => (
-    <TouchableOpacity style={styles.plantCard}>
+    <TouchableOpacity 
+      style={styles.plantCard}
+      onPress={() => router.push({
+        pathname: '/screens/details',
+        params: { 
+          plantId: item.id,
+          plantName: item.plant_name,
+          species: item.species,
+          imageUrl: item.image_url || '',
+          identificationDate: item.identification_date,
+          additionalNotes: item.additional_notes || '',
+          information: item.information || ''
+        }
+      })}
+    >
       <LinearGradient
         colors={['rgba(34 33 33 / 0.2)', 'rgba(0 0 0 / 0.1)']}
         style={styles.cardGradient}
@@ -72,7 +90,7 @@ export default function PlantCard() {
           <View style={styles.placeholderImage} />
         )}
         
-        <View style={styles.plantDetails}>
+        <View style={styles.plantTextContainer}>
           <Text style={styles.plantName} numberOfLines={1}>
             {item.plant_name}
           </Text>
@@ -151,7 +169,7 @@ const styles = StyleSheet.create({
     marginRight: 15,
     backgroundColor: 'rgba(255,255,255,0.2)',
   },
-  plantDetails: {
+  plantTextContainer: {
     flex: 1,
     justifyContent: 'center',
   },
