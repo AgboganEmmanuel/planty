@@ -14,6 +14,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Notifications from 'expo-notifications';
+import { createNotification } from './notifications'; // Import the notification creation function
 
 interface WateringPlant {
   id: string;
@@ -31,10 +32,11 @@ export default function WateringScreen() {
 
   useEffect(() => {
     fetchWateringPlants();
+    checkWateringNotifications();
   }, [session]);
 
   const fetchWateringPlants = async () => {
-    if (!session?.user) return;
+    if (!session?.user) return [];
 
     const { data, error } = await supabase
       .from('plants')
@@ -43,10 +45,43 @@ export default function WateringScreen() {
 
     if (error) {
       console.error('Error fetching watering plants:', error);
-      return;
+      return [];
     }
 
     setPlants(data || []);
+    return data || [];
+  };
+
+  const checkWateringNotifications = async () => {
+    if (!session?.user) return;
+
+    const now = new Date();
+    const plants = await fetchWateringPlants();
+
+    // Use Promise.all to handle multiple async notifications
+    await Promise.all(plants.map(async (plant) => {
+      if (plant.next_watering_date) {
+        const nextWatering = new Date(plant.next_watering_date);
+        const isOverdue = nextWatering < now;
+        const isToday = nextWatering.toDateString() === now.toDateString();
+
+        if (isOverdue) {
+          await createNotification({
+            type: 'Watering Overdue',
+            message: `${plant.plant_name} needs watering urgently!`,
+            plant_id: plant.id
+          });
+        }
+
+        if (isToday) {
+          await createNotification({
+            type: 'Watering Today',
+            message: `${plant.plant_name} needs watering today!`,
+            plant_id: plant.id
+          });
+        }
+      }
+    }));
   };
 
   const recordWatering = async (plant: WateringPlant) => {
@@ -66,6 +101,13 @@ export default function WateringScreen() {
       Alert.alert('Error', 'Could not record watering');
       return;
     }
+
+    // Create a notification for watering
+    await createNotification({
+      type: 'Watering Completed',
+      message: `You watered ${plant.plant_name}`,
+      plant_id: plant.id
+    });
 
     // Schedule a notification for next watering
     await scheduleWateringNotification(plant, nextWateringDate);

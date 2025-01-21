@@ -15,12 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { supabase, deviceId } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { getPlantInformation } from '../lib/huggingface';
-import { createNotification as createNotificationImport, CreateNotificationParams } from '../screens/notifications';
-
-// Créer une copie de la fonction pour éviter les problèmes de contexte
-const createNotification = async (params: CreateNotificationParams) => {
-  return await createNotificationImport(params);
-};
+import { createNotification } from '../screens/notifications';
 
 
 interface PlantResult {
@@ -128,6 +123,20 @@ export default function IdentifyPlantScreen() {
         console.error('Erreur lors de la sauvegarde de la plante:', error);
         return null;
       }
+
+      // Créer une notification pour la nouvelle identification
+      if (data && data[0]) {
+
+        console.log('DEBUG: Ajout de la notification', data[0]);
+
+        await createNotification({
+        type: 'Identification',
+        message: 'New Plant',
+        plant_id: data[0].id
+        });
+      }
+      
+     
       
     /*  // Créer une notification pour la nouvelle identification
       if (data && data[0]) {
