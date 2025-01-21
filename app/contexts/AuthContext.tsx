@@ -4,8 +4,14 @@ import { supabase } from '../lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import { useRouter } from 'expo-router';
 
+export type UserProfile = {
+  full_name?: string;
+  avatar_url?: string;
+};
+
 type AuthContextType = {
   session: Session | null;
+  userProfile: UserProfile | null;
   signUp: (email: string, password: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -15,22 +21,45 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [session, setSession] = useState<Session | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const router = useRouter();
 
   useEffect(() => {
     // Check initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
+      if (session) {
+        const { data: profileData, error } = await supabase
+          .from('profiles')
+          .select('full_name, avatar_url')
+          .eq('id', session.user.id)
+          .single();
+
+        if (profileData) {
+          setUserProfile(profileData);
+        }
+      }
     });
 
     // Listen for auth changes
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
       
-      // Redirect logic based on authentication state
       if (session) {
+        const { data: profileData, error } = await supabase
+          .from('profiles')
+          .select('full_name, avatar_url')
+          .eq('id', session.user.id)
+          .single();
+
+        if (profileData) {
+          setUserProfile(profileData);
+        }
+        
+        // Redirect logic based on authentication state
         router.replace('/screens/my-plants');
       } else {
+        setUserProfile(null);
         router.replace('/screens/auth/SignInScreen');
       }
     });
@@ -63,7 +92,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   return (
-    <AuthContext.Provider value={{ session, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ session, userProfile, signUp, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );
@@ -74,5 +103,5 @@ export const useAuth = () => {
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
-  return context;
+  return { ...context, userProfile: context.userProfile };
 };
