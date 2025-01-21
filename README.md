@@ -145,9 +145,8 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 ## 📞 Contact
 Emmanuel Agbogan
-- Email: emmanuelagbogan@example.com
+- Email: emmanuelagbogan@gmail.com
 - GitHub: [@AgboganEmmanuel](https://github.com/AgboganEmmanuel)
-- Twitter: [@emmanuelagbogan](https://twitter.com/emmanuelagbogan)
 
 ## 🌈 Acknowledgements
 - [Expo](https://expo.dev)
