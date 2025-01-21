@@ -2,7 +2,7 @@
 
 ## Overview
 
-Planty is a comprehensive mobile application designed to revolutionize plant care through technology. Our app empowers plant enthusiasts to manage, track, and nurture their green companions with ease and intelligence.
+Planty is a comprehensive mobile application designed to revolutionize plant care through technology. This app empowers plant enthusiasts to manage, track, and nurture their green companions with ease and intelligence.
 
 ## 🌟 Key Features
 

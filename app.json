@@ -2,12 +2,7 @@
   "expo": {
     "name": "planty",
     "extra": {
-      "HUGGING_FACE_TOKEN": "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",
-      "PLANTNET_API_KEY": "2b109mUPe4QpPvKKgPF2RXCCTu",
-      "PLANTNET_API_ENDPOINT": "https://my-api.plantnet.org/v2/identify",
-      "PLANTNET_API_PROJECT": "all",
-      "NEXT_PUBLIC_SUPABASE_URL": "https://hkshfqyzxsverbknqupp.supabase.co",
-      "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhrc2hmcXl6eHN2ZXJia25xdXBwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzUwMDEzNDMsImV4cCI6MjA1MDU3NzM0M30.6lFrdpSkbs3qaumu0kUlMluBzEcU_kn4ZC_gdnCOxPU"
+      
     },
     "slug": "planty",
     "version": "1.0.0",
